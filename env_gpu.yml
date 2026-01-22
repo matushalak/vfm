@@ -1,0 +1,75 @@
+name: vfm
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  # ---- core runtime ----
+  - python=3.12
+  - pip
+  - setuptools
+  - wheel
+
+  # ---- PyTorch + CUDA (match your working cluster setup) ----
+  - pytorch=2.5.*
+  - torchvision=0.20.*
+  - torchaudio=2.5.*
+  - pytorch-cuda=11.8
+
+  # ---- numeric stack (avoid common ABI pain) ----
+  - numpy>=1.26,<2.0
+  - scipy>=1.11,<1.13
+  - pandas>=2.1
+  - scikit-learn>=1.3
+  - statsmodels>=0.14
+
+  # ---- general utilities ----
+  - pyyaml
+  - tqdm
+  - joblib
+  - rich
+  - typing-extensions
+  - h5py
+  - numba
+
+  # ---- plotting / notebooks ----
+  - matplotlib>=3.8
+  - seaborn>=0.13
+  - plotly>=5.18
+  - ipython
+  - ipykernel
+  - jupyterlab
+  - ipywidgets
+
+  # ---- molecule + structure tooling (discrete + 3D) ----
+  - rdkit>=2024.03
+  - openbabel>=3.1
+  - networkx>=3.2
+
+  # ---- pip-installed ML stack (PyG matched to torch+cu118) ----
+  - pip:
+      # Training / configs / logging (mirrors your working GPU env + Mac env)
+      - pytorch-lightning==2.4.0
+      - torchmetrics>=1.4
+      - tensorboard==2.17.1
+      - hydra-core>=1.3
+      - omegaconf>=2.3
+      - wandb>=0.17
+
+      # Transformer + EGNN/VFM helpers
+      - einops>=0.8
+      - torchdiffeq>=0.2.4
+      - torchsde>=0.2.6
+
+      # PyG compiled wheels for torch 2.5.0 + CUDA 11.8
+      - --find-links https://data.pyg.org/whl/torch-2.5.0+cu118.html
+      - pyg_lib
+      - torch_scatter
+      - torch_sparse
+      - torch_cluster
+      - torch_spline_conv
+      - torch_geometric==2.7.0
+
+      # 3D viz helpers (mainly useful on notebook frontends)
+      - py3Dmol>=2.4
+      - nglview>=3.1

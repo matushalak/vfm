@@ -1,4 +1,4 @@
-
+import os
 import torch
 from torch_geometric.datasets import QM9
 from torch_geometric.loader import DataLoader
@@ -10,9 +10,10 @@ from IPython.display import display
 import py3Dmol
 import matplotlib.pyplot as plt
 
+SAVEDIR = 'generated_molecules'
+
 # Pad first category as No Bond
 # After sampling, when inspect
-
 class QM9Dataset(QM9):
     '''
     Without hydrogens!
@@ -156,10 +157,13 @@ def make_molecule(x, e, size):
 
 
 def show_2d(mol, size=(300, 300)):
+    if not os.path.exists(SAVEDIR): os.makedirs(SAVEDIR)
     img = Draw.MolToImage(mol, size=size)
     plt.figure()
     plt.imshow(img)
     plt.axis("off")
+    plt.tight_layout()
+    plt.savefig(os.path.join(SAVEDIR, f'molecule{len(os.listdir(SAVEDIR))}.png'))
     plt.show()
 
 # TODO: change to work without display and just produce images
