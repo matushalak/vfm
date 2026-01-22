@@ -8,7 +8,6 @@ from architecture import E3GraphTransformer
 from vanilla_transformer import GraphTransformer
 from my_utils import batch_to_dense, PlaceHolder
 
-print('MPS is available:', torch.backends.mps.is_available())
 DEVICE = 'mps' if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
 DEVICE = torch.device(DEVICE)
 

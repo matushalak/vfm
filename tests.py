@@ -1,6 +1,7 @@
 import os
 import torch
-from molecule_data import QM9Dataset, show_2d, make_molecule
+from numpy import array
+from molecule_data import QM9Dataset, show_2d, make_molecule, get_smiles
 from torch_geometric.loader import DataLoader as GraphDataLoader
 from my_utils import batch_to_dense, PlaceHolder
 
@@ -22,9 +23,12 @@ def test_data_loading():
     '''
     # Load Dataset
     # TODO: custom train / val / test split of dataset
-    qm9 = QM9Dataset(root=os.path.join(ROOT, "QM9"), split='train')
+    qm9 = QM9Dataset(root=os.path.join(ROOT, "QM9"), split='train',
+                     small_data=False)
     # Data Loader
     qm9_loader = GraphDataLoader(qm9, batch_size=32, shuffle=False)
+    # Get smiles representation of molecule
+    qm9smiles = get_smiles(qm9_loader)
     # Iter through batch
     qm9_batch = next(iter(qm9_loader))
     # Preprocess batch to dense format
@@ -33,8 +37,9 @@ def test_data_loading():
     g = Graph.mask(node_mask)
     biggest_mol = torch.where(torch.all(torch.any(batch_ready.X == 1,dim = -1), dim = 1))[0][0]
     rdMol = make_molecule(batch_ready.X[biggest_mol], batch_ready.E[biggest_mol], node_mask[biggest_mol,:].sum())
-    show_2d(rdMol)
+    show_2d(rdMol, show=True)
     pass
+
 
 
 

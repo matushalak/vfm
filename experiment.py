@@ -1,12 +1,12 @@
 import os
-import argparge
+import argparse
 import torch
 from torch_geometric.loader import DataLoader as GraphDataLoader
 
 from architecture import E3GraphTransformer
 from vanilla_transformer import GraphTransformer
 from vfm import train, sample
-from molecule_data import QM9Dataset, show_2d, make_molecule, get_stats
+from molecule_data import QM9Dataset, show_2d, make_molecule, get_stats, get_smiles, eval_molecules
 from my_utils import batch_to_dense, PlaceHolder
 from config import get_config_net
 
@@ -42,7 +42,7 @@ def main(args):
     # sample new molecules
     natoms = torch.multinomial(molecule_stats['n'], num_samples=1)
     atom_feats, bond_adj = sample(n_atoms=natoms,
-                                  n_samples=5,
+                                  n_samples=100,
                                   dt = 1e-2, 
                                   net = GT,
                                   dims = dict(x = len(qm9.atom_decoder),
@@ -51,18 +51,27 @@ def main(args):
     # make RdKit molecule
     molecules = [make_molecule(x, e, natoms) 
                  for x, e in zip(atom_feats, bond_adj)]
+    # evaluate generated molecules
+    train_smiles = get_smiles(qm9_loader)
+    qm9 = QM9Dataset(root=os.path.join(ROOT, "QM9"),
+                     drop_H=args.drop_H, keep_pos=args.keep_pos, 
+                     split='test', small_data=args.small_data)
+    qm9_loader = GraphDataLoader(qm9)
+    test_smiles = get_smiles(qm9_loader)
 
-    for mol in molecules:
-        show_2d(mol)
+    valid_molecules, results = eval_molecules(mols = molecules, smiles=(train_smiles, test_smiles))
+    for mol in valid_molecules:
+        show_2d(mol, save=True)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    
     # General parameters
-    parser.add_argument('--epochs', type=int, default=1000,
+    parser.add_argument('--epochs', type=int, default=20,
                         help='number of epochs')
-    parser.add_argument('--bs', type=int, default=128,
+    parser.add_argument('--bs', type=int, default=32,
                         help='batch size')
-    parser.add_argument('--lr', type=float, default=5e-4,
+    parser.add_argument('--lr', type=float, default=1e-3,
                         help='learning rate')
     parser.add_argument('--drop_H', type=bool, default=True,
                         help='train and sample molecules without hydrogens')
@@ -70,10 +79,11 @@ if __name__ == '__main__':
                         help='keep 3d atom positions for training and plotting')
     parser.add_argument('--num_layers', type=int, default=6,
                         help='number of graph transformer blocks')
-    parser.add_argument('--small_model', action='store_true', default=False,
+    parser.add_argument('--small_model', action='store_true', default=True,
                         help='graph transformer with small latent dimensions')
-    parser.add_argument('--small_data', action='store_true', default=False,
+    parser.add_argument('--small_data', action='store_true', default=True,
                         help='only use 1% of the dataset (only 1000 molecules)')
-
     parsed_args = parser.parse_args()
-    main()
+    
+    # run
+    main(parsed_args)

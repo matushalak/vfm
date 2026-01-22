@@ -1,7 +1,11 @@
 import os
 import torch
+from collections import defaultdict
+from tqdm import tqdm
 from torch_geometric.datasets import QM9
 from torch_geometric.loader import DataLoader
+from my_utils import batch_to_dense
+from numpy import array as nparray
 
 from itertools import product
 from rdkit import Chem
@@ -11,6 +15,7 @@ import py3Dmol
 import matplotlib.pyplot as plt
 
 SAVEDIR = 'generated_molecules'
+ROOT = os.path.expanduser("data/pyg_molecules")
 
 # Pad first category as No Bond
 # After sampling, when inspect
@@ -38,11 +43,12 @@ class QM9Dataset(QM9):
         
         # Slice only the appropriate train / val / test sets
         assert split in ('train', 'val', 'test', 'full')
+        self.split = split
         n = super().__len__()
         g = torch.Generator()
         g.manual_seed(42)
         perm = torch.randperm(n, generator=g)
-        # Split numbers taken from VFM paper 
+        # Split proportions taken from VFM paper 
         # https://openreview.net/forum?id=UahrHR5HQh&noteId=BoBuVw1Bmx
         split_slice = {'train': slice(0, 100000),
                        'val': slice(100000, 120000),
@@ -52,6 +58,8 @@ class QM9Dataset(QM9):
         if small_data:
             idx = idx[:1000]
         self.idx_set = idx.tolist()
+        smiles = nparray(self.smiles, dtype=str)
+        self.smiles = smiles[self.idx_set]
         
     def __len__(self):
         return len(self.idx_set)
@@ -122,14 +130,13 @@ def get_stats(drop_H:bool = True)->dict:
     return dist
 
     
-
 def make_molecule(x, e, size):
     ''' 
     Make RdKit molecule from Matrix representation without hydrogens
     Should work for QM9 and ZINC
     '''
-    x = x.squeeze()
-    e = e.squeeze()
+    x = x.squeeze(0)
+    e = e.squeeze(0)
     dict = {'C': 0, 'N': 1, 'O': 2, 'F': 3, 'Br': 4, 'Cl': 5, 'I': 6, 'P': 7, 'S': 8}
     atom_dict = {v: k for k, v in dict.items()}
 
@@ -156,16 +163,105 @@ def make_molecule(x, e, size):
     return molecule
 
 
-def show_2d(mol, size=(300, 300), show:bool = False):
+def get_smiles(loader, redo:bool = False):
+    ''' 
+    Adapted from VFM paper
+    QM9.smiles contains hydrogens which may not be desirable
+    '''
+    list_smiles = []
+    smiles_dir = os.path.join(ROOT, 'QM9', f'smiles_{loader.dataset.split}.txt')
+    if os.path.exists(smiles_dir) and not redo:
+        with open(smiles_dir, 'r') as smls:
+            for smile in smls:
+                list_smiles.append(smile.removesuffix('\n'))
+        return list_smiles
+    else:
+        with open(smiles_dir, 'w') as smls:
+            for mol in tqdm(loader.dataset):
+                mol, node_mask = batch_to_dense(mol)
+                max_nodes = max(node_mask.sum(axis=-1))
+                mol = make_molecule(mol.X, mol.E, max_nodes)
+                smiles = Chem.MolToSmiles(mol)
+                list_smiles.append(smiles)
+                smls.write(smiles+'\n')
+        return list_smiles
+
+
+def eval_molecules(mols:list, smiles:tuple[list]
+                   )->tuple[list, dict]:
+    '''
+    Evaluate generated molecules on
+        Validity, Uniqueness, Novelty and Frechet Chemnet Distance (FCD)
+    '''
+    import numpy as np
+    from fcd import get_fcd, load_ref_model, canonical_smiles, get_predictions, calculate_frechet_distance
+    nmols = len(mols) # for final stats use 10,000
+    results = {'Valid':0,
+               'Unique':0,
+               'Novel':0,
+               'FCD':0}
+    valid_mols = []
+    
+    # 1) Validity check (does the largest connected component compile to smiles)
+    for mol in mols:
+        try:
+            Chem.SanitizeMol(mol)
+            Chem.Kekulize(mol)
+            mol_frags = Chem.rdmolops.GetMolFrags(mol, asMols=True, sanitizeFrags=True)
+            largest_mol = max(mol_frags, default=mol, key=lambda m: m.GetNumAtoms())
+            results['Valid'] += 1
+            valid_mols.append(largest_mol)
+        except:
+            continue # invalid molecule if doesnt compile to smiles
+    results['Valid'] /= nmols # 1) Validity %
+
+    # 2) Uniqueness check (are the generated samples different)
+    unique_set = set([Chem.MolToSmiles(mol) for mol in valid_mols]) # out of valid, how many unique
+    results['Unique'] = len(unique_set) / len(valid_mols) if len(valid_mols) > 0 else 0
+    
+    # 3) Novelty check (how many novel and not present in training data)
+    train_smiles, test_smiles = smiles
+    generated_smiles = list(unique_set)
+    # transform to canonical smiles
+    can_gen = [w for w in canonical_smiles(generated_smiles) if w is not None]
+    can_train = [w for w in canonical_smiles(train_smiles) if w is not None]
+    # compute novelty on canonical smiles format
+    novel_set = set(can_gen) - set(can_train)
+    results['Novel'] = len(novel_set) / len(can_gen) if len(can_gen)>0 else 0
+    
+    # 4) Frechet ChemNet Distance (FCD)
+    # canonical smiles of test-set
+    can_test = [w for w in canonical_smiles(test_smiles) if w is not None]
+    # calculate ChemNet activations
+    ChemNet = load_ref_model()
+    test_fc = get_predictions(ChemNet, can_test)
+    generated_fc = get_predictions(ChemNet, can_gen)
+    # Distribution stats
+    mu_test, sigma_test = np.mean(test_fc, axis=0), np.cov(test_fc, rowvar=False)
+    mu_generated, sigma_generated = np.mean(generated_fc, axis=0), np.cov(generated_fc, rowvar=False)
+    # Calculate Frechet ChemNet distance
+    try:
+        fcd_score = calculate_frechet_distance(mu_test, sigma_test, mu_generated, sigma_generated)
+    except:
+        fcd_score = 1e8
+    results['FCD'] = fcd_score
+    print(results)
+    
+    return valid_mols, results
+
+def show_2d(mol, size=(300, 300), 
+            show:bool = False, save:bool = False):
     if not os.path.exists(SAVEDIR): os.makedirs(SAVEDIR)
     img = Draw.MolToImage(mol, size=size)
     plt.figure()
     plt.imshow(img)
     plt.axis("off")
     plt.tight_layout()
-    plt.savefig(os.path.join(SAVEDIR, f'molecule{len(os.listdir(SAVEDIR))}.png'))
+    if save:
+        plt.savefig(os.path.join(SAVEDIR, f'molecule{len(os.listdir(SAVEDIR))}.png'))
     if show:
         plt.show()
+    plt.close()
 
 # TODO: change to work without display and just produce images
 def show_3d(mol, style="stick"):
