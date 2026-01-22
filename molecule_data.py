@@ -156,7 +156,7 @@ def make_molecule(x, e, size):
     return molecule
 
 
-def show_2d(mol, size=(300, 300)):
+def show_2d(mol, size=(300, 300), show:bool = False):
     if not os.path.exists(SAVEDIR): os.makedirs(SAVEDIR)
     img = Draw.MolToImage(mol, size=size)
     plt.figure()
@@ -164,7 +164,8 @@ def show_2d(mol, size=(300, 300)):
     plt.axis("off")
     plt.tight_layout()
     plt.savefig(os.path.join(SAVEDIR, f'molecule{len(os.listdir(SAVEDIR))}.png'))
-    plt.show()
+    if show:
+        plt.show()
 
 # TODO: change to work without display and just produce images
 def show_3d(mol, style="stick"):

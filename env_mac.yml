@@ -71,3 +71,6 @@ dependencies:
       # ---- 3D visualization helpers ----
       - py3Dmol>=2.4
       - nglview>=3.1
+
+      # Frechet Chemnet Distance
+      - fcd

@@ -73,3 +73,6 @@ dependencies:
       # 3D viz helpers (mainly useful on notebook frontends)
       - py3Dmol>=2.4
       - nglview>=3.1
+
+      # Frechet Chemnet Distance
+      - fcd
