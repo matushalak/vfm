@@ -83,7 +83,7 @@ def main(args):
     writer.flush()
     writer.close()
     # plot valid molecules
-    for mol in valid_molecules:
+    for mol in valid_molecules[::50]:
         show_2d(mol, save=True, SAVEDIR=log_path)
 
 
