@@ -14,7 +14,6 @@ from IPython.display import display
 import py3Dmol
 import matplotlib.pyplot as plt
 
-SAVEDIR = 'generated_molecules'
 ROOT = os.path.expanduser("data/pyg_molecules")
 
 # Pad first category as No Bond
@@ -250,7 +249,8 @@ def eval_molecules(mols:list, smiles:tuple[list]
     return valid_mols, results
 
 def show_2d(mol, size=(300, 300), 
-            show:bool = False, save:bool = False):
+            show:bool = False, save:bool = False,
+            SAVEDIR = 'generated_molecules'):
     if not os.path.exists(SAVEDIR): os.makedirs(SAVEDIR)
     img = Draw.MolToImage(mol, size=size)
     plt.figure()

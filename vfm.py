@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch_geometric.loader import DataLoader as GraphDataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from architecture import E3GraphTransformer
@@ -14,7 +15,8 @@ DEVICE = torch.device(DEVICE)
 def train(net:E3GraphTransformer, G:GraphDataLoader, 
           incl_positions:bool = False,
           TRAIN:bool = True,
-          epochs:int = 200, lr:float = 5e-4):
+          epochs:int = 200, lr:float = 5e-4,
+          writer=None):
     '''
     VFM training for Discrete / Joint Graph Generation
     t=0 pure noise, t=1 graph from training distribution
@@ -35,7 +37,7 @@ def train(net:E3GraphTransformer, G:GraphDataLoader,
         net.eval()
 
     for e in tqdm(range(epochs)):
-        l = 0
+        l, a, b, c = 0,0,0,0
         for g1 in G:
             optimizer.zero_grad()
             # Preprocess batch to dense format
@@ -87,15 +89,32 @@ def train(net:E3GraphTransformer, G:GraphDataLoader,
                 pred_c = mu_theta.C.reshape(-1, n_coords) # (bs*nmax, n_coords=3)
                 target_c1 = c1.reshape(-1, n_coords) # (bs*nmax, n_coords=3)
                 pos_loss = pos_objective(pred_c[mask_x], target_c1[mask_x])
+                c += pos_loss.detach()
             
             # Combine objectives
             loss = atom_loss + 5*bond_loss
-            l += loss / ngraphs
+            a += atom_loss.detach()
+            b += bond_loss.detach()
+            l += loss.detach()
+
             if TRAIN:
                 loss.backward()
                 nn.utils.clip_grad_norm_(net.parameters(), 1.0)
                 optimizer.step()
-        print(f'Epoch {e}, Loss: {l}')
+        
+        # Tensorboard logging per epoch
+        if writer is not None:
+            writer.add_scalar('train/atom_loss', float(a.cpu()) / len(G), e)
+            writer.add_scalar('train/bond_loss', float(b.cpu()) / len(G), e)
+            writer.add_scalar('train/total_loss', float(l.cpu()) / len(G), e)
+            if incl_positions:
+                writer.add_scalar('train/pos_loss', float(c.cpu()) / len(G), e)
+            writer.add_scalar('train/lr', float(optimizer.param_groups[0]['lr']), e)
+
+        print(f'Epoch {e}, Loss: {l / len(G)}, atom: {a / len(G)}, bond: {b / len(G)}\n')
+        if TRAIN:
+            lr_scheduler.step()
+
 
 
 def sample(n_atoms:int, 

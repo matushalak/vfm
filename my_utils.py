@@ -83,6 +83,10 @@ def assert_correctly_masked(variable, node_mask):
     assert (variable * (1 - node_mask.long())).abs().max().item() < 1e-4, \
         'Variables not masked properly.'
 
+def get_run_name(args)->str:
+    name = str(vars(args))
+    name = name.replace(' ', '').replace("'", "")
+    return 'run_'+ name
 
 ### Structural features, taken from VFM paper https://openreview.net/forum?id=UahrHR5HQh&noteId=BoBuVw1Bmx
 # but based on DiGress https://github.com/cvignac/DiGress
