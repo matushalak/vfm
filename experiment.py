@@ -37,6 +37,7 @@ def main(args):
     os.makedirs(log_path, exist_ok=True)
     writer = SummaryWriter(log_dir=log_path)
     writer.add_text('hparams', str(vars(args)))
+    print('TRAINING!')
     train(net=GT,
           G = qm9_loader,
           incl_positions=args.keep_pos,
