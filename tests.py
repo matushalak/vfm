@@ -3,9 +3,12 @@ import torch
 from numpy import array, nanmean, nanmax, nanmin
 from molecule_data import QM9Dataset, show_2d, make_molecule, get_smiles
 from torch_geometric.loader import DataLoader as GraphDataLoader
-from my_utils import batch_to_dense, PlaceHolder
+from my_utils import batch_to_dense, PlaceHolder, load_checkpoint
 from matplotlib import pyplot as plt
 from tqdm import tqdm
+from vfm import sample
+from vanilla_transformer import GraphTransformer
+from config import get_config_net
 
 ROOT = os.path.expanduser("data/pyg_molecules")
 
@@ -63,5 +66,12 @@ def study_distances(loader):
     print(f'DistMax: mean {nanmean(array(dists_max))}, max {nanmax(array(dists_max))}')
     print(f'DistMin: mean {nanmean(array(dists_min))}, min {nanmin(array(dists_min))}')
 
+def test_checkpoint():
+    path = 'runs/run_{epochs:22,bs:512,lr:0.001,drop_H:True,keep_pos:False,num_layers:6,n_molsizes:2,mol_per_molsize:50,small_model:True,small_data:True}/checkpoints/best_fcd.pt'
+    model = get_config_net(num_layers=6, num_node_feats=4, num_edge_feats=5)
+    ckpt = load_checkpoint(path = path, model = model) 
+    breakpoint()
+
 if __name__ == '__main__':
+    test_checkpoint()
     test_data_loading(drop_H=True)

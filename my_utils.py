@@ -1,3 +1,6 @@
+import os
+import contextlib
+
 import torch
 import torch.utils as torch_utils
 from torch_geometric.utils import to_dense_batch, remove_self_loops, to_dense_adj
@@ -197,3 +200,51 @@ def get_eigenvectors_features(vectors, node_mask, n_connected, k=2):
     first_k_ev = first_k_ev * node_mask.unsqueeze(2)
 
     return not_lcc_indicator, first_k_ev
+
+#### Supress console output
+@contextlib.contextmanager
+def suppress_console_output(suppress_stdout=True, suppress_stderr=True):
+    devnull = os.open(os.devnull, os.O_WRONLY)
+
+    old_stdout_fd = os.dup(1) if suppress_stdout else None
+    old_stderr_fd = os.dup(2) if suppress_stderr else None
+
+    try:
+        if suppress_stdout:
+            os.dup2(devnull, 1)
+        if suppress_stderr:
+            os.dup2(devnull, 2)
+        yield
+    finally:
+        if suppress_stdout and old_stdout_fd is not None:
+            os.dup2(old_stdout_fd, 1)
+            os.close(old_stdout_fd)
+        if suppress_stderr and old_stderr_fd is not None:
+            os.dup2(old_stderr_fd, 2)
+            os.close(old_stderr_fd)
+        os.close(devnull)
+
+# Checkpointing
+def save_checkpoint(path, model, optimizer=None, scheduler=None, epoch=None):
+    parent = os.path.dirname(path)
+    os.makedirs(parent, exist_ok=True)
+    
+    ckpt = {
+        "model": model.state_dict(),
+        "epoch": epoch,
+    }
+    if optimizer is not None:
+        ckpt["optimizer"] = optimizer.state_dict()
+    if scheduler is not None:
+        ckpt["scheduler"] = scheduler.state_dict()
+
+    torch.save(ckpt, path)
+
+def load_checkpoint(path, model, optimizer=None, scheduler=None, map_location="cpu"):
+    ckpt = torch.load(path, map_location=map_location)
+    model.load_state_dict(ckpt["model"])
+    if optimizer is not None and "optimizer" in ckpt:
+        optimizer.load_state_dict(ckpt["optimizer"])
+    if scheduler is not None and "scheduler" in ckpt:
+        scheduler.load_state_dict(ckpt["scheduler"])
+    return ckpt

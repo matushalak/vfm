@@ -252,7 +252,6 @@ def eval_molecules(mols:list, smiles:tuple[list]
     except:
         fcd_score = 1e8
     results['FCD'] = fcd_score
-    print(results)
     
     return valid_mols, results
 
