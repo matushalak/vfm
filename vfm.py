@@ -8,15 +8,16 @@ from tqdm import tqdm
 from architecture import E3GraphTransformer
 from vanilla_transformer import GraphTransformer
 from my_utils import batch_to_dense, PlaceHolder
+from molecule_data import eval_molecules, make_molecule, get_stats
 
 DEVICE = 'mps' if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
 DEVICE = torch.device(DEVICE)
 
-def train(net:E3GraphTransformer, G:GraphDataLoader, 
+def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader, 
           incl_positions:bool = False,
           TRAIN:bool = True,
           epochs:int = 200, lr:float = 5e-4,
-          writer=None):
+          writer=None, smiles:tuple|None = None, drop_H:bool = True):
     '''
     VFM training for Discrete / Joint Graph Generation
     t=0 pure noise, t=1 graph from training distribution
@@ -110,6 +111,37 @@ def train(net:E3GraphTransformer, G:GraphDataLoader,
             if incl_positions:
                 writer.add_scalar('train/pos_loss', float(c.cpu()) / len(G), e)
             writer.add_scalar('train/lr', float(optimizer.param_groups[0]['lr']), e)
+
+            if e % 10 == 0 and smiles is not None:
+                # Eval sample quality
+                net.eval()
+                # sample new molecules with different number of atoms 4 times
+                all_gen_molecules = []
+                for _ in range(5):
+                    natoms = torch.multinomial(get_stats(drop_H)['n'], num_samples=1)
+                    atom_feats, bond_adj = sample(n_atoms=natoms,
+                                                  n_samples=60,
+                                                  dt = 1e-2, 
+                                                  net = net,
+                                                  dims = dict(x = len(G.dataset.atom_decoder),
+                                                              e = len(G.dataset.bond_decoder)),
+                                                  incl_positions=incl_positions)
+                    # make RdKit molecule
+                    molecules = [make_molecule(x, e, natoms) 
+                                for x, e in zip(atom_feats, bond_adj)]
+                    all_gen_molecules += molecules
+                
+                # evaluate generated molecules
+                valid_molecules, results = eval_molecules(mols = all_gen_molecules, 
+                                                        smiles=smiles)
+                
+                # log results
+                for k, v in results.items():
+                    try:
+                        writer.add_scalar(f'validation/{k}', float(v), e)
+                    except Exception:
+                        pass
+
 
         print(f'Epoch {e}, Loss: {l / len(G)}, atom: {a / len(G)}, bond: {b / len(G)}\n')
         if TRAIN:

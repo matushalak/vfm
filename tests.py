@@ -1,13 +1,15 @@
 import os
 import torch
-from numpy import array
+from numpy import array, nanmean, nanmax, nanmin
 from molecule_data import QM9Dataset, show_2d, make_molecule, get_smiles
 from torch_geometric.loader import DataLoader as GraphDataLoader
 from my_utils import batch_to_dense, PlaceHolder
+from matplotlib import pyplot as plt
+from tqdm import tqdm
 
 ROOT = os.path.expanduser("data/pyg_molecules")
 
-def test_data_loading():
+def test_data_loading(drop_H = False):
     '''
     The QM9 chemical data set of small molecules.
 
@@ -23,10 +25,12 @@ def test_data_loading():
     '''
     # Load Dataset
     # TODO: custom train / val / test split of dataset
-    qm9 = QM9Dataset(root=os.path.join(ROOT, "QM9"), split='train',
-                     small_data=False)
+    qm9 = QM9Dataset(root=os.path.join(ROOT, "QM9"), split='test',
+                     small_data=False, keep_pos=True, drop_H=drop_H)
     # Data Loader
     qm9_loader = GraphDataLoader(qm9, batch_size=32, shuffle=False)
+    # study_distances(qm9_loader)
+
     # Get smiles representation of molecule
     qm9smiles = get_smiles(qm9_loader)
     # Iter through batch
@@ -35,14 +39,29 @@ def test_data_loading():
     batch_ready, node_mask = batch_to_dense(qm9_batch)
     Graph = PlaceHolder(batch_ready.X, batch_ready.E, batch_ready.y)
     g = Graph.mask(node_mask)
-    biggest_mol = torch.where(torch.all(torch.any(batch_ready.X == 1,dim = -1), dim = 1))[0][0]
-    rdMol = make_molecule(batch_ready.X[biggest_mol], batch_ready.E[biggest_mol], node_mask[biggest_mol,:].sum())
+    biggest_mol = 10#torch.where(torch.all(torch.any(batch_ready.X == 1,dim = -1), dim = 1))[0][0]
+    rdMol = make_molecule(batch_ready.X[biggest_mol], batch_ready.E[biggest_mol], node_mask[biggest_mol,:].sum(),
+                          drop_H=drop_H)
     show_2d(rdMol, show=True)
     pass
 
 
+def study_distances(loader):
+    dists_max = []
+    dists_min = []
+    for bbb in tqdm(loader):
+        assert hasattr(bbb, 'pos')
+        g, node_mask = batch_to_dense(bbb)
+        c = g.C
+        dist = torch.sqrt(((c[:, :, None, :] - c[:, None, :, :])**2).sum(-1))
+        dist_mask = node_mask[..., None] & node_mask[:, None, :]
+        dist_mask &= ~torch.eye(node_mask.shape[1], device=dist.device, dtype=torch.bool)[None, :, :]
+        dist[~dist_mask] = torch.nan
+        dists_max.append(nanmax(dist))
+        dists_min.append(nanmin(dist))
 
-
+    print(f'DistMax: mean {nanmean(array(dists_max))}, max {nanmax(array(dists_max))}')
+    print(f'DistMin: mean {nanmean(array(dists_min))}, min {nanmin(array(dists_min))}')
 
 if __name__ == '__main__':
-    test_data_loading()
+    test_data_loading(drop_H=True)

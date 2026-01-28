@@ -3,7 +3,7 @@ import torch
 from collections import defaultdict
 from tqdm import tqdm
 from torch_geometric.datasets import QM9
-from torch_geometric.loader import DataLoader
+from torch_geometric.loader import DataLoader as GraphDataLoader
 from my_utils import batch_to_dense
 from numpy import array as nparray
 
@@ -129,7 +129,7 @@ def get_stats(drop_H:bool = True)->dict:
     return dist
 
     
-def make_molecule(x, e, size):
+def make_molecule(x, e, size, drop_H = True):
     ''' 
     Make RdKit molecule from Matrix representation without hydrogens
     Should work for QM9 and ZINC
@@ -137,6 +137,12 @@ def make_molecule(x, e, size):
     x = x.squeeze(0)
     e = e.squeeze(0)
     dict = {'C': 0, 'N': 1, 'O': 2, 'F': 3, 'Br': 4, 'Cl': 5, 'I': 6, 'P': 7, 'S': 8}
+    
+    if not drop_H:
+        for k, v in dict.items():
+            dict[k] += 1
+        dict['H'] = 0
+
     atom_dict = {v: k for k, v in dict.items()}
 
     molecule = Chem.RWMol()
@@ -162,13 +168,15 @@ def make_molecule(x, e, size):
     return molecule
 
 
-def get_smiles(loader, redo:bool = False):
+def get_smiles(loader:GraphDataLoader, redo:bool = False):
     ''' 
     Adapted from VFM paper
     QM9.smiles contains hydrogens which may not be desirable
     '''
     list_smiles = []
-    smiles_dir = os.path.join(ROOT, 'QM9', f'smiles_{loader.dataset.split}.txt')
+    split = loader.dataset.split
+    smiles_dir = os.path.join(ROOT, 'QM9', f'smiles_{split}.txt')
+
     if os.path.exists(smiles_dir) and not redo:
         with open(smiles_dir, 'r') as smls:
             for smile in smls:
