@@ -68,6 +68,7 @@ def main(args):
     molecule_stats = get_stats(drop_H=args.drop_H)
     # sample new molecules with different number of atoms 100 times
     all_gen_molecules = []
+    all_pred_coords = []
     print('Generating molecules!')
     with suppress_console_output():
         for _ in tqdm(range(args.n_molsizes)):
@@ -83,8 +84,10 @@ def main(args):
             
             if args.keep_pos:
                 atom_feats, bond_adj, coords = out
+                all_pred_coords += [c for c in coords]
             else:
                 atom_feats, bond_adj = out
+                all_pred_coords = None
             
             # make RdKit molecule
             molecules = [make_molecule(x, e, natoms) 
@@ -93,7 +96,8 @@ def main(args):
         
         # evaluate generated molecules
         valid_molecules, results = eval_molecules(mols = all_gen_molecules, 
-                                                smiles=(train_smiles, test_smiles))
+                                                  smiles=(train_smiles, test_smiles),
+                                                  pred_coords = all_pred_coords)
     
     # log results
     print('\nFinal gen results:\n', results)

@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -144,6 +145,7 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
                 net.eval()
                 # sample new molecules with different number of atoms 4 times
                 all_gen_molecules = []
+                all_pred_coords = []
                 with suppress_console_output():
                     for _ in range(5):
                         natoms = torch.multinomial(get_stats(drop_H)['n'], num_samples=1)
@@ -158,8 +160,10 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
                         
                         if incl_positions:
                             atom_feats, bond_adj, coords = out
+                            all_pred_coords += [c for c in coords]
                         else:
                             atom_feats, bond_adj = out
+                            all_pred_coords = None
 
                         # make RdKit molecule
                         molecules = [make_molecule(x, e, natoms) 
@@ -168,7 +172,8 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
                     
                     # evaluate generated molecules
                     valid_molecules, results = eval_molecules(mols = all_gen_molecules, 
-                                                              smiles=smiles)
+                                                              smiles=smiles,
+                                                              pred_coords = all_pred_coords)
                 
                 # log results & save best models
                 print(f'\nEpoch {e} gen results:\n', results)

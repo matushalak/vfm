@@ -5,7 +5,7 @@ from tqdm import tqdm
 from torch_geometric.datasets import QM9
 from torch_geometric.loader import DataLoader as GraphDataLoader
 from my_utils import batch_to_dense
-from numpy import array as nparray
+from numpy import array as nparray, mean as npmean, float32 as npfloat32
 
 from itertools import product
 from rdkit import Chem
@@ -209,6 +209,15 @@ def eval_molecules(mols:list, smiles:tuple[list], **kwargs
                'FCD':0}
     valid_mols = []
     valid_coords = []
+    have_coords:bool = 'pred_coords' in kwargs and kwargs['pred_coords'] is not None
+    pred_coords_all = kwargs.get('pred_coords', None)
+    
+    if have_coords:
+        # allow list or tensor
+        if isinstance(pred_coords_all, list):
+            assert len(pred_coords_all) == nmols
+        else:
+            assert pred_coords_all.shape[0] == nmols
     
     # 1) Validity check (does the largest connected component compile to smiles)
     for im, mol in enumerate(mols):
@@ -216,11 +225,16 @@ def eval_molecules(mols:list, smiles:tuple[list], **kwargs
             Chem.SanitizeMol(mol)
             Chem.Kekulize(mol)
             mol_frags = Chem.rdmolops.GetMolFrags(mol, asMols=True, sanitizeFrags=True)
+            where_frags = Chem.rdmolops.GetMolFrags(mol, asMols=False, sanitizeFrags=True)
+            largest_frag = max(where_frags, key=len)
+            atom_ids = list(largest_frag)
+
             largest_mol = max(mol_frags, default=mol, key=lambda m: m.GetNumAtoms())
             results['Valid'] += 1
             valid_mols.append(largest_mol)
-            if 'pred_coords' in kwargs:
-                valid_coords.append(kwargs['pred_coords'][im])
+            if have_coords:
+                coord = torch.as_tensor(pred_coords_all[im])
+                valid_coords.append(coord)
         except:
             continue # invalid molecule if doesnt compile to smiles
     results['Valid'] /= nmols # 1) Validity %
@@ -256,17 +270,16 @@ def eval_molecules(mols:list, smiles:tuple[list], **kwargs
         fcd_score = 1e8
     results['FCD'] = fcd_score
 
-    if 'pred_coords' in kwargs:
-        results3d = eval_3d_molecules_rdkit(valid_mols, valid_coords)
+    # 5) (Optional) 3D coord eval
+    if have_coords:
+        results.update(eval_3d_molecules_rdkit(valid_mols, valid_coords))
     
     return valid_mols, results
 
 def eval_3d_molecules_rdkit(valid_mols: list,
                             pred_coords: torch.Tensor,
-                            drop_H: bool = True,
                             max_attempts: int = 20,
-                            random_seed: int = 42,
-                            ) -> dict:
+                            random_seed: int = 42) -> dict:
     """
     3D evaluation by:
       - generating an RDKit conformer for each molecule (ETKDG)
@@ -278,18 +291,9 @@ def eval_3d_molecules_rdkit(valid_mols: list,
     """
 
     if pred_coords is None or len(valid_mols) == 0:
-        return {
-            "3d_embed_rate": 0.0,
-            "3d_dist_mae": float("nan"),
-            "3d_dist_rmse": float("nan"),
-        }
+        return {"3d_embed_rate": 0.0, "3d_dist_mae": float("nan"), "3d_dist_rmse": float("nan")}
     assert len(valid_mols) == len(pred_coords)
     N = len(valid_mols)
-
-    # upper triangular mask (no diagonal, no double counting)
-    triu = torch.triu(
-        torch.ones(n_atoms, n_atoms, dtype=torch.bool), diagonal=1
-    )
 
     maes = []
     rmses = []
@@ -299,9 +303,13 @@ def eval_3d_molecules_rdkit(valid_mols: list,
     params.randomSeed = int(random_seed)
 
     for i, (mol, coord) in enumerate(zip(valid_mols, pred_coords)):
-        # RDKit embedding works more reliably with hydrogens
-        molH = Chem.AddHs(mol)
+        coord = torch.as_tensor(coord).detach().cpu().float()
+        n_atoms = mol.GetNumAtoms()
+        if coord.dim() != 2 or coord.shape[0] != n_atoms or coord.shape[1] != 3:
+            continue
 
+        # RDKit conformer works more reliably with hydrogens
+        molH = Chem.AddHs(mol)
         cid = -1
         for k in range(max_attempts):
             params.randomSeed = int(random_seed + 1000 * i + k)
@@ -317,19 +325,16 @@ def eval_3d_molecules_rdkit(valid_mols: list,
             pass
 
         conf = molH.GetConformer()
-        rd_coords = torch.tensor(conf.GetPositions(), dtype=torch.float)
+        rd = nparray(conf.GetPositions(), dtype=npfloat32)
 
-        # Heavy atoms come first after AddHs
-        n_heavy = mol.GetNumAtoms()
-        if n_heavy != n_atoms:
-            continue
+        # Heavy atoms first after AddHs; keep only heavy-atom coords matching mol
+        rd_heavy = torch.from_numpy(rd[:n_atoms]).float()
 
-        rd_coords = rd_coords[:n_heavy]
-        pred = coord[:n_atoms].float()
+        # upper triangle mask
+        triu = torch.triu(torch.ones(n_atoms, n_atoms, dtype=torch.bool), diagonal=1)
 
-        # Pairwise distance matrices
-        d_pred = torch.cdist(pred, pred)
-        d_rd = torch.cdist(rd_coords, rd_coords)
+        d_pred = torch.cdist(coord, coord)
+        d_rd = torch.cdist(rd_heavy, rd_heavy)
 
         diff = (d_pred - d_rd)[triu]
         maes.append(diff.abs().mean().item())
@@ -338,9 +343,8 @@ def eval_3d_molecules_rdkit(valid_mols: list,
 
     return {
         "3d_embed_rate": success / max(N, 1),
-        "3d_dist_mae": float(np.mean(maes)) if maes else float("nan"),
-        "3d_dist_rmse": float(np.mean(rmses)) if rmses else float("nan"),
-    }
+        "3d_dist_mae": float(npmean(maes)) if maes else float("nan"),
+        "3d_dist_rmse": float(npmean(rmses)) if rmses else float("nan")}
 
 
 def show_2d(mol, size=(300, 300), 
