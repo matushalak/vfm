@@ -135,6 +135,8 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
             writer.add_scalar('train/total_loss', float(l.cpu()) / len(G), e)
             if incl_positions:
                 writer.add_scalar('train/pos_loss', float(c.cpu()) / len(G), e)
+                writer.add_scalar('train/pairwise_distance_mean', pred_cd.mean().detach().cpu(), e)
+                writer.add_scalar('train/pairwise_distance_var', pred_cd.var().detach().cpu(), e)
             writer.add_scalar('train/lr', float(optimizer.param_groups[0]['lr']), e)
 
             if e % 10 == 0 and smiles is not None:
@@ -145,14 +147,20 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
                 with suppress_console_output():
                     for _ in range(5):
                         natoms = torch.multinomial(get_stats(drop_H)['n'], num_samples=1)
-                        atom_feats, bond_adj = sample(n_atoms=natoms,
-                                                      n_samples=200,
-                                                      dt = 1e-2, 
-                                                      net = net,
-                                                      dims = dict(x = len(G.dataset.atom_decoder),
-                                                                  e = len(G.dataset.bond_decoder),
-                                                                  c = 3),
-                                                      incl_positions=incl_positions)
+                        out = sample(n_atoms=natoms,
+                                    n_samples=200,
+                                    dt = 1e-2, 
+                                    net = net,
+                                    dims = dict(x = len(G.dataset.atom_decoder),
+                                                e = len(G.dataset.bond_decoder),
+                                                c = 3),
+                                    incl_positions=incl_positions)
+                        
+                        if incl_positions:
+                            atom_feats, bond_adj, coords = out
+                        else:
+                            atom_feats, bond_adj = out
+
                         # make RdKit molecule
                         molecules = [make_molecule(x, e, natoms) 
                                     for x, e in zip(atom_feats, bond_adj)]
@@ -230,5 +238,8 @@ def sample(n_atoms:int,
                 vt_c = (mu_t.C - ct) / torch.clamp(1-t, min = 0.05)
                 ct += (vt_c * dt)
         
-        return xt, et
+        if incl_positions:
+            return xt, et, ct
+        else:
+            return xt, et
     

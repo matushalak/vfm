@@ -72,14 +72,20 @@ def main(args):
     with suppress_console_output():
         for _ in tqdm(range(args.n_molsizes)):
             natoms = torch.multinomial(molecule_stats['n'], num_samples=1)
-            atom_feats, bond_adj = sample(n_atoms=natoms,
-                                        n_samples=args.mol_per_molsize,
-                                        dt = 1e-2, 
-                                        net = GT,
-                                        dims = dict(x = len(qm9_train.atom_decoder),
-                                                    e = len(qm9_train.bond_decoder),
-                                                    c = 3),
-                                        incl_positions=args.keep_pos)
+            out = sample(n_atoms=natoms,
+                        n_samples=args.mol_per_molsize,
+                        dt = 1e-2, 
+                        net = GT,
+                        dims = dict(x = len(qm9_train.atom_decoder),
+                                    e = len(qm9_train.bond_decoder),
+                                    c = 3),
+                        incl_positions=args.keep_pos)
+            
+            if args.keep_pos:
+                atom_feats, bond_adj, coords = out
+            else:
+                atom_feats, bond_adj = out
+            
             # make RdKit molecule
             molecules = [make_molecule(x, e, natoms) 
                         for x, e in zip(atom_feats, bond_adj)]

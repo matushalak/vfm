@@ -194,7 +194,7 @@ def get_smiles(loader:GraphDataLoader, redo:bool = False):
         return list_smiles
 
 
-def eval_molecules(mols:list, smiles:tuple[list]
+def eval_molecules(mols:list, smiles:tuple[list], **kwargs
                    )->tuple[list, dict]:
     '''
     Evaluate generated molecules on
@@ -208,9 +208,10 @@ def eval_molecules(mols:list, smiles:tuple[list]
                'Novel':0,
                'FCD':0}
     valid_mols = []
+    valid_coords = []
     
     # 1) Validity check (does the largest connected component compile to smiles)
-    for mol in mols:
+    for im, mol in enumerate(mols):
         try:
             Chem.SanitizeMol(mol)
             Chem.Kekulize(mol)
@@ -218,6 +219,8 @@ def eval_molecules(mols:list, smiles:tuple[list]
             largest_mol = max(mol_frags, default=mol, key=lambda m: m.GetNumAtoms())
             results['Valid'] += 1
             valid_mols.append(largest_mol)
+            if 'pred_coords' in kwargs:
+                valid_coords.append(kwargs['pred_coords'][im])
         except:
             continue # invalid molecule if doesnt compile to smiles
     results['Valid'] /= nmols # 1) Validity %
@@ -252,8 +255,93 @@ def eval_molecules(mols:list, smiles:tuple[list]
     except:
         fcd_score = 1e8
     results['FCD'] = fcd_score
+
+    if 'pred_coords' in kwargs:
+        results3d = eval_3d_molecules_rdkit(valid_mols, valid_coords)
     
     return valid_mols, results
+
+def eval_3d_molecules_rdkit(valid_mols: list,
+                            pred_coords: torch.Tensor,
+                            drop_H: bool = True,
+                            max_attempts: int = 20,
+                            random_seed: int = 42,
+                            ) -> dict:
+    """
+    3D evaluation by:
+      - generating an RDKit conformer for each molecule (ETKDG)
+      - comparing pairwise distance matrices (E(3)-invariant) between
+        predicted coordinates and RDKit conformer coordinates
+
+    mols        : list[rdkit.Chem.Mol]
+    pred_coords : torch.Tensor (N, n_atoms, 3)
+    """
+
+    if pred_coords is None or len(valid_mols) == 0:
+        return {
+            "3d_embed_rate": 0.0,
+            "3d_dist_mae": float("nan"),
+            "3d_dist_rmse": float("nan"),
+        }
+    assert len(valid_mols) == len(pred_coords)
+    N = len(valid_mols)
+
+    # upper triangular mask (no diagonal, no double counting)
+    triu = torch.triu(
+        torch.ones(n_atoms, n_atoms, dtype=torch.bool), diagonal=1
+    )
+
+    maes = []
+    rmses = []
+    success = 0
+
+    params = AllChem.ETKDGv3()
+    params.randomSeed = int(random_seed)
+
+    for i, (mol, coord) in enumerate(zip(valid_mols, pred_coords)):
+        # RDKit embedding works more reliably with hydrogens
+        molH = Chem.AddHs(mol)
+
+        cid = -1
+        for k in range(max_attempts):
+            params.randomSeed = int(random_seed + 1000 * i + k)
+            cid = AllChem.EmbedMolecule(molH, params)
+            if cid >= 0:
+                break
+        if cid < 0:
+            continue
+
+        try:
+            AllChem.UFFOptimizeMolecule(molH, maxIters=200)
+        except Exception:
+            pass
+
+        conf = molH.GetConformer()
+        rd_coords = torch.tensor(conf.GetPositions(), dtype=torch.float)
+
+        # Heavy atoms come first after AddHs
+        n_heavy = mol.GetNumAtoms()
+        if n_heavy != n_atoms:
+            continue
+
+        rd_coords = rd_coords[:n_heavy]
+        pred = coord[:n_atoms].float()
+
+        # Pairwise distance matrices
+        d_pred = torch.cdist(pred, pred)
+        d_rd = torch.cdist(rd_coords, rd_coords)
+
+        diff = (d_pred - d_rd)[triu]
+        maes.append(diff.abs().mean().item())
+        rmses.append(torch.sqrt((diff * diff).mean()).item())
+        success += 1
+
+    return {
+        "3d_embed_rate": success / max(N, 1),
+        "3d_dist_mae": float(np.mean(maes)) if maes else float("nan"),
+        "3d_dist_rmse": float(np.mean(rmses)) if rmses else float("nan"),
+    }
+
 
 def show_2d(mol, size=(300, 300), 
             show:bool = False, save:bool = False,
