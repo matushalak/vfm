@@ -9,6 +9,8 @@ __pycache__/
 # Folders
 data/
 
+*.DS_Store
+
 # Distribution / packaging
 .Python
 build/
