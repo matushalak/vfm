@@ -106,7 +106,7 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
                 pos_loss = pos_objective(pred_cd[mask_e], target_cd[mask_e])
             
                 # Combine objectives
-                loss = atom_loss + 5*bond_loss + 0.1*pos_loss
+                loss = atom_loss + 5*bond_loss + 0.01*pos_loss
                 c += pos_loss.detach()
             
             else:
