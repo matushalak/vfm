@@ -30,7 +30,7 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
     atom_objective = nn.CrossEntropyLoss()
     edge_objective = nn.CrossEntropyLoss()
     if incl_positions:
-        pos_objective = nn.MSELoss()
+        pos_objective = nn.MSELoss(reduction='mean')
     
     net.to(DEVICE)
     if TRAIN:
@@ -66,7 +66,9 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
                 Ct = ((1-T)[:, None, None] * C0) + (T[:, None, None]*c1)
 
             # Expectation (mu_theta) over Predicted Variational distribution q_theta over vector endpoints
-            mu_theta = net(Xt, Et, T[:, None], node_mask) # forward pass
+                mu_theta = net(Xt, Et, Ct, T[:, None], node_mask) # forward pass
+            else:
+                mu_theta = net(Xt, Et, T[:, None], node_mask) # forward pass
             
             # Losses: Ground truth Target vs Expectation of Variational Dist over target
             # Nodes (atoms)
@@ -89,15 +91,28 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
             bond_loss = edge_objective(pred_e[mask_e], target_e1[mask_e])
             
             # 3D atomic coordinates
+            # TODO: check masking of loss & coord output!!!
             if incl_positions:
-                n_coords = mu_theta.C.size(-1) 
-                pred_c = mu_theta.C.reshape(-1, n_coords) # (bs*nmax, n_coords=3)
-                target_c1 = c1.reshape(-1, n_coords) # (bs*nmax, n_coords=3)
-                pos_loss = pos_objective(pred_c[mask_x], target_c1[mask_x])
+                # train on invariant loss (pairwise distance matrix)
+                # relative_vects (E3 equivariant)
+                pred_rel_c = mu_theta.C[:, :, None, :] - mu_theta.C[:, None, :, :] # (b, n, 1, 3) - (b, 1, n, 3) => (b, n, n, 3)
+                rel_c = c1[:, :, None, :] - c1[:, None, :, :] # (b, n, 1, 3) - (b, 1, n, 3) => (b, n, n, 3)
+                # pairwise dist atom distances (E3 invariant)
+                predCD = (pred_rel_c**2).sum(-1) # (b, n, n, 3) -> (b, n, n)
+                CD = (rel_c**2).sum(-1) # (b, n, n, 3) -> (b, n, n)
+
+                pred_cd = predCD.reshape(-1) # (bs*nmax*nmax)
+                target_cd = CD.reshape(-1) # (bs*nmax*nmax)
+                pos_loss = pos_objective(pred_cd[mask_e], target_cd[mask_e])
+            
+                # Combine objectives
+                loss = atom_loss + 5*bond_loss + 0.1*pos_loss
                 c += pos_loss.detach()
             
-            # Combine objectives
-            loss = atom_loss + 5*bond_loss
+            else:
+                # Combine objectives
+                loss = atom_loss + 5*bond_loss
+            
             a += atom_loss.detach()
             b += bond_loss.detach()
             l += loss.detach()
@@ -135,7 +150,8 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
                                                       dt = 1e-2, 
                                                       net = net,
                                                       dims = dict(x = len(G.dataset.atom_decoder),
-                                                                  e = len(G.dataset.bond_decoder)),
+                                                                  e = len(G.dataset.bond_decoder),
+                                                                  c = 3),
                                                       incl_positions=incl_positions)
                         # make RdKit molecule
                         molecules = [make_molecule(x, e, natoms) 
@@ -169,12 +185,14 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
                         writer.add_scalar(f'validation/{k}', float(v), e)
                     except Exception:
                         pass
-
-        print(f'\nEpoch {e}, Loss: {l / len(G)}, atom: {a / len(G)}, bond: {b / len(G)}\n')
+        if not incl_positions:
+            print(f'\nEpoch {e}, Loss: {l / len(G)}, atom: {a / len(G)}, bond: {b / len(G)}\n')
+        else:
+            print(f'\nEpoch {e}, Loss: {l / len(G)}, atom: {a / len(G)}, bond: {b / len(G)}, position: {c / len(G)}\n')
         if TRAIN:
             lr_scheduler.step()
 
-
+# TODO adjust for outputting and evaluating positions
 def sample(n_atoms:int, 
            n_samples:int, dt:float, 
            net:E3GraphTransformer|GraphTransformer, 
@@ -196,7 +214,10 @@ def sample(n_atoms:int,
         for t in T:
             # get expectation of variational dist over targets
             t_samples = t.expand(n_samples, 1)
-            mu_t = net(xt, et, t_samples, node_mask)
+            if incl_positions:
+                mu_t = net(xt, et, ct, t_samples, node_mask)
+            else:
+                mu_t = net(xt, et, t_samples, node_mask)
             mu_t_x = torch.softmax(mu_t.X, dim=-1)
             mu_t_e = torch.softmax(mu_t.E, dim=-1)
             # Construct vector field

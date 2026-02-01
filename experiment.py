@@ -48,7 +48,7 @@ def main(args):
                         num_node_feats=len(qm9_train.atom_decoder),
                         num_edge_feats=len(qm9_train.bond_decoder),
                         small_model=args.small_model,
-                        transformer=E3GraphTransformer if args.keep_pos else GraphTransformer)
+                        transformer=E3GraphTransformer if args.keep_pos == True else GraphTransformer)
     # train model & log
     log_path = os.path.join(LOGDIR, get_run_name(args))
     os.makedirs(log_path, exist_ok=True)
@@ -77,7 +77,8 @@ def main(args):
                                         dt = 1e-2, 
                                         net = GT,
                                         dims = dict(x = len(qm9_train.atom_decoder),
-                                                    e = len(qm9_train.bond_decoder)),
+                                                    e = len(qm9_train.bond_decoder),
+                                                    c = 3),
                                         incl_positions=args.keep_pos)
             # make RdKit molecule
             molecules = [make_molecule(x, e, natoms) 
@@ -101,7 +102,7 @@ def main(args):
     for mol in valid_molecules[::100]:
         show_2d(mol, save=True, SAVEDIR=log_path)
 
-
+# TODO eval if also regular VFM messed up now
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     

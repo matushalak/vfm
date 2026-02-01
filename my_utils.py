@@ -44,7 +44,7 @@ class PlaceHolder:
         '''
         Node features (atom class)
         Edge features (bond class)
-        y graph-level features (spectral, structural)
+        y graph-level features (spectral, structural, time)
         C node coordinates (only for continuous / joint molecular graph generation)
         '''
         self.X = X
@@ -57,7 +57,7 @@ class PlaceHolder:
         self.X = self.X.type_as(x)
         self.E = self.E.type_as(x)
         self.y = self.y.type_as(x)
-        if self.C:
+        if self.C is not None:
             self.C = self.C.type_as(x)
         return self
 
@@ -72,12 +72,12 @@ class PlaceHolder:
 
             self.X[node_mask == 0] = - 1
             self.E[(e_mask1 * e_mask2).squeeze(-1) == 0] = - 1
-            if self.C:
+            if self.C is not None:
                 self.C[node_mask == 0] = None
         else:
             self.X = self.X * x_mask
             self.E = self.E * e_mask1 * e_mask2
-            if self.C:
+            if self.C is not None:
                 self.C = self.C * x_mask
             assert torch.allclose(self.E, torch.transpose(self.E, 1, 2))
         return self
