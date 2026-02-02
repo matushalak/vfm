@@ -271,11 +271,12 @@ class E3NodeEdgeCoordBlock(nn.Module):
                                      Linear(2*dy, n_head),
                                      nn.Softplus())
 
-        # FiLM E to X (concat U to E)
+        # FiLM E to X 
         self.e_add = Linear(de, dx)
         self.e_mul = Linear(de, dx)
-        # self.e_add = Linear(de+du, dx)
-        # self.e_mul = Linear(de+du, dx)
+        # (concat U to E) 
+        # self.e_add = Linear(de+du, dx) # removed - mode collapse
+        # self.e_mul = Linear(de+du, dx) # removed - mode collapse
 
         # FiLM y to E
         self.y_e_mul = Linear(dy, dx)           # Warning: here it's dx and not de
@@ -294,7 +295,7 @@ class E3NodeEdgeCoordBlock(nn.Module):
         # Output layers
         self.x_out = Linear(dx, dx)
         self.e_out = Linear(dx, de)
-        # self.c_out = Linear(dc, dc)
+        # self.c_out = Linear(dc, dc) # removed - mode collapse
         self.y_out = nn.Sequential(nn.Linear(dy, dy), nn.ReLU(), nn.Linear(dy, dy))
 
     def forward(self, X, E, C, U, rel, y, node_mask):
@@ -314,7 +315,9 @@ class E3NodeEdgeCoordBlock(nn.Module):
         e_mask2 = x_mask.unsqueeze(1)           # bs, 1, n, 1
 
         # 0. Concatenate E and U (incorporate enriched distances as edge features)
-        EU = E #torch.cat((E, U), dim = -1) # (bs, n, n, de) -> (bs, n, n, de+du)
+        # didn't work, mode collapse
+        # EU = torch.cat((E, U), dim = -1) # (bs, n, n, de) -> (bs, n, n, de+du)
+        EU = E 
 
         # 1. Map X to keys and queries
         Q = self.q(X) * x_mask           # (bs, n, dx)
@@ -412,7 +415,7 @@ class E3NodeEdgeCoordBlock(nn.Module):
         # PNA + linear layer to fit dim_y
         e_y = self.e_y(E)
         x_y = self.x_y(X)
-        # c_y = self.c_y(U)
+        # c_y = self.c_y(U) # removed - mode collapse
         new_y = y + x_y + e_y #+ c_y
         new_y = self.y_out(new_y)               # bs, dy
 
