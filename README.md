@@ -52,6 +52,30 @@ To sample new molecules using pre-trained models use:
 python pretrained.py
 ```
 
+## 🧠 Architecture Details
+The **ABC-Transformer** is a specialized graph transformer designed to joint-model discrete molecular features and continuous 3D coordinates while strictly adhering to $E(3)$-equivariance. The architecture processes four concurrent data streams—**A**toms ($X$), **B**onds ($E$), **C**oordinates ($C$), and global features ($y$)—through a series of equivariant blocks.
+
+### 1. E(3)-Equivariant Coordinate Update
+The core innovation is the `E3NodeEdgeCoordBlock`, which updates atomic positions using a multi-head attention-modulated rule that ensures the model's outputs remain consistent regardless of the molecule's rotation or translation in space. The coordinate update $\Delta c$ for a node $i$ is defined as:
+
+$$\Delta c_{i} = \sum_{h=1}^H \eta_t^{(h)} \sum_{j=1}^N (a_{ij}^{(h)} s_{ij}^{(h)} \hat{r}_{ij})$$
+
+* **$\eta_t^{(h)}$**: A time-dependent learning rate for each head $h$, derived from the global features $y$.
+* **$a_{ij}^{(h)}$**: Scaled dot-product attention scores that determine the importance of neighbor $j$ in updating the position of node $i$.
+* **$s_{ij}^{(h)}$**: Scalar gates derived from the concatenation of node, edge, coordinate, and global features that determine the magnitude and sign of the spatial shift.
+* **$\hat{r}_{ij}$**: Unit-length relative coordinate vectors ($\frac{c_i - c_j}{\|c_i - c_j\|}$) providing the equivariant direction for the update.
+
+### 2. Feature Stream Updates
+Each transformer layer updates the discrete and global streams to maintain a rich representation of the molecular graph:
+* **Node ($X$) and Edge ($E$) Streams**: These features are updated via multi-head self-attention. Global context is integrated into these streams using **FiLM** (Feature Wise Linear Modulation) layers, which apply affine transformations based on the global vector $y$.
+* **Global Stream ($y$)**: Global graph features are updated using **Principal Neighborhood Aggregation (PNA)**, which aggregates information across all nodes and edges to provide a comprehensive representation of the entire molecule.
+* **Pairwise Enrichment**: Before self-attention, the model expands $E(3)$-invariant pairwise distances $d_{ij}$ using a **Radial Basis Function (RBF)**, which is then processed through an MLP to inform the attention mechanism.
+
+
+### 3. Symmetry and Preservation
+* **Permutation Equivariance**: Maintained through the use of neighborhood aggregation and self-attention, ensuring the model is invariant to the ordering of atoms in the input.
+* **Coordinate Stability**: While node, edge, and global features are "lifted" into higher-dimensional latent spaces, coordinates remain in $\mathbb{R}^3$ throughout the network to preserve their geometric meaning and equivariance.
+
 ## 📜 Citation
 If you use this code in your research, please cite:
 @article{halak2026abcvfm,
