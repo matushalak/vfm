@@ -63,7 +63,7 @@ $$\Delta c_{i} = \sum_{h=1}^H \eta_t^{(h)} \sum_{j=1}^N (a_{ij}^{(h)} s_{ij}^{(h
 * **$\eta_t^{(h)}$**: A time-dependent learning rate for each head $h$, derived from the global features $y$.
 * **$a_{ij}^{(h)}$**: Scaled dot-product attention scores that determine the importance of neighbor $j$ in updating the position of node $i$.
 * **$s_{ij}^{(h)}$**: Scalar gates derived from the concatenation of node, edge, coordinate, and global features that determine the magnitude and sign of the spatial shift.
-* **$\hat{r}_{ij}$**: Unit-length relative coordinate vectors ($\frac{c_i - c_j}{\|c_i - c_j\|}$) providing the equivariant direction for the update.
+* **$\hat{r}_{ij}$**: Unit-length relative coordinate vectors $\frac{c_i - c_j}{||c_i - c_j||_2}$ providing the equivariant direction for the update.
 
 ### 2. Feature Stream Updates
 Each transformer layer updates the discrete and global streams to maintain a rich representation of the molecular graph:
