@@ -194,7 +194,7 @@ def get_smiles(loader:GraphDataLoader, redo:bool = False):
         return list_smiles
 
 
-def eval_molecules(mols:list, smiles:tuple[list], **kwargs
+def eval_molecules(mols:list, smiles:tuple[list]=None, valid_only:bool = False, **kwargs
                    )->tuple[list, dict]:
     '''
     Evaluate generated molecules on
@@ -228,15 +228,19 @@ def eval_molecules(mols:list, smiles:tuple[list], **kwargs
             where_frags = Chem.rdmolops.GetMolFrags(mol, asMols=False, sanitizeFrags=True)
             largest_frag = max(where_frags, key=len)
             atom_ids = list(largest_frag)
-
+            # largest connected component => valid molecule
             largest_mol = max(mol_frags, default=mol, key=lambda m: m.GetNumAtoms())
             results['Valid'] += 1
             valid_mols.append(largest_mol)
             if have_coords:
-                coord = torch.as_tensor(pred_coords_all[im])
+                # only take coordinates of the largest connected component
+                coord = torch.as_tensor(pred_coords_all[im])[atom_ids,:]
                 valid_coords.append(coord)
         except:
             continue # invalid molecule if doesnt compile to smiles
+    if valid_only:
+        return valid_mols, valid_coords
+    
     results['Valid'] /= nmols # 1) Validity %
 
     # 2) Uniqueness check (are the generated samples different)
@@ -362,11 +366,89 @@ def show_2d(mol, size=(300, 300),
         plt.show()
     plt.close()
 
-# TODO: change to work without display and just produce images
-def show_3d(mol, style="stick"):
-    mb = Chem.MolToMolBlock(mol)
-    view = py3Dmol.view(width=420, height=320)
-    view.addModel(mb, "mol")
-    view.setStyle({style: {}})
-    view.zoomTo()
-    return view.show()
+
+def show_3d(mol, coords, *, savepath=None, figsize=(5, 5), dpi=250,
+            elev=20, azim=35, axis_off=True, linewidth=2, s=25, close=True,
+            show:bool = False):
+    """
+    Minimal 3D render: plot atoms + bonds using the *given* coords.
+
+    coords: array/tensor of shape (N,3)
+    """
+    from rdkit.Chem.rdchem import BondType
+
+    X = coords.detach().cpu().float().numpy()
+    if X.ndim != 2 or X.shape[1] != 3:
+        raise ValueError(f"coords must be (N,3); got {X.shape}")
+
+    n = mol.GetNumAtoms()
+    if X.shape[0] != n:
+        raise ValueError(f"coords has N={X.shape[0]} but mol has {n} atoms")
+
+    # color sets
+    atom_colors = {
+        "H":  "#FFFFFF",
+        "C":  "#4A4A4A",
+        "N":  "#2B6CB0",
+        "O":  "#C53030",
+        "F":  "#2F855A",
+        "Cl": "#38A169",
+        "Br": "#B7791F",
+        "I":  "#6B46C1",
+        "S":  "#D69E2E",
+        "P":  "#DD6B20",
+    }
+    default_atom_color = "#808080"
+
+    bond_style = {
+        BondType.SINGLE:   {"color": "k",   "lw": 2.0},
+        BondType.DOUBLE:   {"color": "b",   "lw": 3.0},
+        BondType.TRIPLE:   {"color": "r",   "lw": 4.0},
+        BondType.AROMATIC: {"color": "m",   "lw": 2.5},
+    }
+    default_style = {"color": "k", "lw": 2.0}
+
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(1, 1, 1, projection="3d")
+
+    # atoms (single color)
+    symbols = [a.GetSymbol() for a in mol.GetAtoms()]
+    unique_syms = sorted(set(symbols), key=lambda s: symbols.index(s))  # preserve first-seen order
+
+    for sym in unique_syms:
+        idx = [i for i, s in enumerate(symbols) if s == sym]
+        col = atom_colors.get(sym, default_atom_color)
+        ax.scatter(
+            X[idx, 0], X[idx, 1], X[idx, 2],
+            s=s, depthshade=True,
+            color=col, label=sym)
+
+    # bonds
+    for b in mol.GetBonds():
+        i = b.GetBeginAtomIdx()
+        j = b.GetEndAtomIdx()
+        st = bond_style.get(b.GetBondType(), default_style)
+
+        ax.plot([X[i, 0], X[j, 0]],
+                [X[i, 1], X[j, 1]],
+                [X[i, 2], X[j, 2]],
+                linewidth=st["lw"],
+                color=st["color"])
+
+    ax.view_init(elev=elev, azim=azim)
+    if axis_off:
+        ax.set_axis_off()
+
+    fig.tight_layout()
+
+    if savepath is not None:
+        os.makedirs(os.path.dirname(savepath), exist_ok=True)
+        fig.savefig(savepath, dpi=dpi, bbox_inches="tight")
+
+    if show:
+        plt.show()
+        
+    if close:
+        plt.close(fig)
+
+    return fig, ax

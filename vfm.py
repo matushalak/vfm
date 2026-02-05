@@ -205,12 +205,15 @@ def train(net:E3GraphTransformer|GraphTransformer, G:GraphDataLoader,
         if TRAIN:
             lr_scheduler.step()
 
-# TODO adjust for outputting and evaluating positions
+
 def sample(n_atoms:int, 
            n_samples:int, dt:float, 
            net:E3GraphTransformer|GraphTransformer, 
            dims:dict,
-           incl_positions:bool = False):
+           incl_positions:bool = False,
+           init_xt=None,
+           init_et=None,
+           init_ct=None):
     '''
     VFM sampling / generation for Discrete/Joint Molecular Generation
     '''
@@ -218,13 +221,13 @@ def sample(n_atoms:int,
         net.eval()
         T = torch.arange(0,1, dt, device=DEVICE)
         # at t=0 start with gaussian noise
-        xt = torch.randn((n_samples, n_atoms, dims['x']), device=DEVICE)
-        et = torch.randn((n_samples, n_atoms, n_atoms, dims['e']), device=DEVICE)
+        xt = torch.randn((n_samples, n_atoms, dims['x']), device=DEVICE) if init_xt is None else init_xt
+        et = torch.randn((n_samples, n_atoms, n_atoms, dims['e']), device=DEVICE) if init_et is None else init_et
         if incl_positions:
-            ct = torch.randn((n_samples, n_atoms, dims['c']), device=DEVICE)
+            ct = torch.randn((n_samples, n_atoms, dims['c']), device=DEVICE) if init_ct is None else init_ct
         node_mask = torch.full((n_samples, n_atoms), fill_value=True, 
                                dtype=torch.bool, device=DEVICE)
-        for t in T:
+        for t in tqdm(T):
             # get expectation of variational dist over targets
             t_samples = t.expand(n_samples, 1)
             if incl_positions:
@@ -236,7 +239,7 @@ def sample(n_atoms:int,
             # Construct vector field
             vt_x = (mu_t_x - xt) / torch.clamp(1-t, min = 0.05)
             vt_e = (mu_t_e - et) / torch.clamp(1-t, min = 0.05)
-            # move along vector field (integrate ODE)
+            # move along vector field (Euler integrate ODE)
             xt += (vt_x * dt)
             et += (vt_e * dt)
             if incl_positions:

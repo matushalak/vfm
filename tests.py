@@ -67,7 +67,7 @@ def study_distances(loader):
     print(f'DistMin: mean {nanmean(array(dists_min))}, min {nanmin(array(dists_min))}')
 
 def test_checkpoint():
-    path = 'runs/run_{epochs:22,bs:512,lr:0.001,drop_H:True,keep_pos:False,num_layers:6,n_molsizes:2,mol_per_molsize:50,small_model:True,small_data:True}/checkpoints/best_fcd.pt'
+    path = 'runs/run_{epochs/1000,bs/1024,lr/0.001,drop_H/True,keep_pos/True,num_layers/6,n_molsizes/100,mol_per_molsize/100,small_model/False,small_data/False}/checkpoints/best_fcd.pt'
     model = get_config_net(num_layers=6, num_node_feats=4, num_edge_feats=5)
     ckpt = load_checkpoint(path = path, model = model) 
     breakpoint()

@@ -247,4 +247,4 @@ def load_checkpoint(path, model, optimizer=None, scheduler=None, map_location="c
         optimizer.load_state_dict(ckpt["optimizer"])
     if scheduler is not None and "scheduler" in ckpt:
         scheduler.load_state_dict(ckpt["scheduler"])
-    return ckpt
+    return model
