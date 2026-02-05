@@ -11,8 +11,7 @@ This work was carried out as a Graph Generative Modeling project for the Machine
 * **VFM Framework**: Implementation of Mean-Field Variational Flow Matching and CatFlow for stable generative modeling of categorical and continuous data.
 
 ## 📁 Repository Structure
-```bash
-.
+```
 ├── architecture.py          # Core ABC-Transformer and Equivariant blocks
 ├── vanilla_transformer.py   # Baseline DiGress-style Graph Transformer
 ├── vfm.py                   # Variational Flow Matching logic and loss functions
@@ -28,29 +27,30 @@ This work was carried out as a Graph Generative Modeling project for the Machine
 ├── tests.py                 # Miscellaneous tests
 ├── fm-vs-vfm.ipynb          # Notebook contrasting FM vs VFM on toy datasets (half-moons, checkerboard)
 ├── molecules.ipynb          # Notebook for exploration of QM9 and ZINC molecular datasets
+```
 
 ## 🚀 Getting Started
-
 ### 1. Installation
 Clone the repository and set up the environment using the provided YAML files (optimized for either GPU or MacOS/M-series):
 
-```bash
+```
 conda env create -f env_gpu.yml
 conda activate vfm
-
+```
 ### 2. Training & Evaluation
 To train and evaluate the Vanilla DiGress-Transformer on the QM9 dataset for discrete molecular generation:
-```bash
+```
 python experiment.py --epochs 1000 --bs 1024 --lr 1e-3
-
+```
 To train and evaluate the ABC-Transformer on the QM9 dataset for joint molecular generation:
-```bash
+```
 python experiment.py --epochs 1000 --bs 1024 --lr 1e-3 --keep_pos True
-
+```
 ### 3. Sampling
 To sample new molecules using pre-trained models use:
-```bash
+```
 python pretrained.py
+```
 
 ## 📜 Citation
 If you use this code in your research, please cite:
