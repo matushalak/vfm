@@ -1,8 +1,9 @@
 # ABC-VFM: E(3)-equivariant Variational Flow Matching for Molecular Generation
 
 This repository contains the implementation of the **ABC-Transformer**, an $E(3)$-equivariant graph transformer designed for the joint generation of discrete molecular structures (Atoms and Bonds) and continuous 3D geometries (Coordinates). The model is trained using the **Variational Flow Matching (VFM)** framework.
-
 This work was carried out as a Graph Generative Modeling project for the Machine Learning for Graphs MSc. Artificial Intelligence course @ VU Amsterdam.
+
+[**Read the Technical Report (PDF)**](Matus_Halak_ABC-VFM.pdf)
 
 ## 🌟 Key Features
 * **ABC-Transformer Architecture**: A novel backbone handling four concurrent data streams: Atoms ($X$), Bonds ($E$), Coordinates ($C$), and Global features ($y$).
@@ -69,7 +70,7 @@ $$\Delta c_{i} = \sum_{h=1}^H \eta_t^{(h)} \sum_{j=1}^N (a_{ij}^{(h)} s_{ij}^{(h
 Each transformer layer updates the discrete and global streams to maintain a rich representation of the molecular graph:
 * **Node ($X$) and Edge ($E$) Streams**: These features are updated via multi-head self-attention. Global context is integrated into these streams using **FiLM** (Feature Wise Linear Modulation) layers, which apply affine transformations based on the global vector $y$.
 * **Global Stream ($y$)**: Global graph features are updated using **Principal Neighborhood Aggregation (PNA)**, which aggregates information across all nodes and edges to provide a comprehensive representation of the entire molecule.
-* **Pairwise Enrichment**: Before computing the scalar gates, the model expands $E(3)$-invariant pairwise distances $d_{ij}$ using a **Radial Basis Function (RBF)**, which is then processed through an MLP to inform $s_{ij}^{(h)}$.
+* **Pairwise Enrichment**: $E(3)$-invariant pairwise distances $d_{ij}$ are expanded via **Radial Basis Function (RBF)**, and processed through an MLP to inform $s_{ij}^{(h)}$.
 
 
 ### 3. Symmetry and Preservation
