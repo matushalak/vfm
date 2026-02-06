@@ -69,7 +69,7 @@ $$\Delta c_{i} = \sum_{h=1}^H \eta_t^{(h)} \sum_{j=1}^N (a_{ij}^{(h)} s_{ij}^{(h
 Each transformer layer updates the discrete and global streams to maintain a rich representation of the molecular graph:
 * **Node ($X$) and Edge ($E$) Streams**: These features are updated via multi-head self-attention. Global context is integrated into these streams using **FiLM** (Feature Wise Linear Modulation) layers, which apply affine transformations based on the global vector $y$.
 * **Global Stream ($y$)**: Global graph features are updated using **Principal Neighborhood Aggregation (PNA)**, which aggregates information across all nodes and edges to provide a comprehensive representation of the entire molecule.
-* **Pairwise Enrichment**: Before self-attention, the model expands $E(3)$-invariant pairwise distances $d_{ij}$ using a **Radial Basis Function (RBF)**, which is then processed through an MLP to inform the attention mechanism.
+* **Pairwise Enrichment**: Before computing the scalar gates, the model expands $E(3)$-invariant pairwise distances $d_{ij}$ using a **Radial Basis Function (RBF)**, which is then processed through an MLP to inform $s_{ij}^{(h)}$.
 
 
 ### 3. Symmetry and Preservation
