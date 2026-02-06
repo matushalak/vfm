@@ -1,9 +1,9 @@
 # ABC-VFM: E(3)-equivariant Variational Flow Matching for Molecular Generation
 
-This repository contains the implementation of the **ABC-Transformer**, an $E(3)$-equivariant graph transformer designed for the joint generation of discrete molecular structures (Atoms and Bonds) and continuous 3D geometries (Coordinates). The model is trained using the **Variational Flow Matching (VFM)** framework.
+This repository contains the implementation of the **ABC-Transformer**, an $E(3)$-equivariant graph transformer designed for the joint generation of discrete molecular structures (Atoms and Bonds) and continuous 3D geometries (Coordinates). The model is trained using the **Variational Flow Matching (VFM)** framework. [**Read the Technical Report (PDF)**](Matus_Halak_ABC-VFM.pdf)
+
 This work was carried out as a Graph Generative Modeling project for the Machine Learning for Graphs MSc. Artificial Intelligence course @ VU Amsterdam.
 
-[**Read the Technical Report (PDF)**](Matus_Halak_ABC-VFM.pdf)
 
 ## 🌟 Key Features
 * **ABC-Transformer Architecture**: A novel backbone handling four concurrent data streams: Atoms ($X$), Bonds ($E$), Coordinates ($C$), and Global features ($y$).
